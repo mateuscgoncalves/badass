@@ -1,0 +1,79 @@
+! ============================================================================
+! Device : router_mgoncalv-2
+! Role   : Leaf / VTEP (VNI 10) - host port eth1, uplink to RR eth0
+!
+! Sources (all persisted in the GNS3 project):
+!   - Interfaces/IPs : /etc/frr/zebra.conf
+!   - OSPF underlay  : /etc/frr/ospfd.conf
+!   - BGP EVPN       : /etc/frr/bgpd.conf
+!   - Bridge/VXLAN   : /etc/network/interfaces (Linux, last section)
+! ============================================================================
+frr version 8.4_git
+frr defaults traditional
+hostname router_mgoncalv-2
+!
+! ----------------------------------------------------------------------------
+! Interfaces / IPs (zebra)
+! ----------------------------------------------------------------------------
+! Point-to-point /30 link to the route reflector (RR side is 10.1.1.1).
+interface eth0
+ ip address 10.1.1.2/30
+exit
+!
+! Loopback /32 = stable router identity: BGP router-id, BGP session source
+! and VXLAN tunnel endpoint (VTEP) IP.
+interface lo
+ ip address 1.1.1.2/32
+exit
+!
+no ipv6 forwarding
+!
+! ----------------------------------------------------------------------------
+! OSPF (underlay)
+! ----------------------------------------------------------------------------
+! Only job: make every loopback reachable from every router.
+! "network 0.0.0.0/0 area 0" enables OSPF on every interface that has an IP,
+! all in a single area (backbone).
+router ospf
+ network 0.0.0.0/0 area 0
+exit
+!
+! ----------------------------------------------------------------------------
+! BGP EVPN (overlay control plane)
+! ----------------------------------------------------------------------------
+! iBGP AS 1, single session with the RR (1.1.1.1), sourced from the loopback.
+! The RR reflects what the other leaves announce, so no leaf-to-leaf sessions.
+router bgp 1
+ bgp router-id 1.1.1.2
+ neighbor 1.1.1.1 remote-as 1
+ neighbor 1.1.1.1 update-source lo
+ !
+ ! l2vpn evpn family; "advertise-all-vni" announces the local VNI 10:
+ !   type 3 route = "I am a VTEP for VNI 10"
+ !   type 2 route = "MAC X is behind me"
+ address-family l2vpn evpn
+  neighbor 1.1.1.1 activate
+  advertise-all-vni
+ exit-address-family
+!
+exit
+!
+# ============================================================================
+# Linux bridge / VXLAN - /etc/network/interfaces
+# ============================================================================
+# br0 is a virtual switch joining the host port (eth1) and the VXLAN tunnel.
+# vxlan10 = VNI 10, UDP 4789, "local" = this leaf's loopback (VTEP IP).
+# No remote/group: BGP EVPN distributes the remote VTEPs and MACs.
+# "nolearning": MACs come from BGP, not from data-plane flooding.
+# mtu 1450 = 1500 - 50 bytes of VXLAN encapsulation.
+# /sbin/ip is called explicitly: the busybox "ip" of the GNS3 console
+# cannot create vxlan interfaces.
+auto eth1
+iface eth1 inet manual
+    up /sbin/ip link add br0 type bridge
+    up /sbin/ip link set dev br0 up
+    up /sbin/ip link add name vxlan10 type vxlan id 10 dstport 4789 local 1.1.1.2 nolearning
+    up /sbin/ip link set dev vxlan10 mtu 1450
+    up /sbin/ip link set dev vxlan10 up
+    up /sbin/ip link set vxlan10 master br0
+    up /sbin/ip link set eth1 master br0

@@ -1,0 +1,10 @@
+# ============================================================================
+# Device : host_mgoncalv-2
+# File   : /etc/network/interfaces (applied by GNS3 at boot)
+# ============================================================================
+# 20.1.1.0/24 is the overlay network shared by the 3 hosts. For the host it
+# is just a flat L2 LAN: it does not know the VXLAN tunnel exists.
+auto eth0
+iface eth0 inet static
+    address 20.1.1.2
+    netmask 255.255.255.0

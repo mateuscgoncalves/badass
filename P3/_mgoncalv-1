@@ -1,0 +1,70 @@
+! ============================================================================
+! Device : router_mgoncalv-1
+! Role   : Route Reflector (RR) - BGP EVPN control plane only, no VXLAN
+!
+! Sources (all persisted in the GNS3 project):
+!   - Interfaces/IPs : /etc/frr/zebra.conf
+!   - OSPF underlay  : /etc/frr/ospfd.conf
+!   - BGP EVPN       : /etc/frr/bgpd.conf
+! ============================================================================
+frr version 8.4_git
+frr defaults traditional
+hostname router_mgoncalv-1
+!
+! ----------------------------------------------------------------------------
+! Interfaces / IPs (zebra)
+! ----------------------------------------------------------------------------
+! Point-to-point /30 links, one per leaf:
+!   eth0 -> mgoncalv-2, eth1 -> mgoncalv-3, eth2 -> mgoncalv-4
+interface eth0
+ ip address 10.1.1.1/30
+exit
+!
+interface eth1
+ ip address 10.1.1.5/30
+exit
+!
+interface eth2
+ ip address 10.1.1.9/30
+exit
+!
+! Loopback /32 = stable router identity (never goes down with a link).
+! Used as BGP router-id and as the BGP session source.
+interface lo
+ ip address 1.1.1.1/32
+exit
+!
+no ipv6 forwarding
+!
+! ----------------------------------------------------------------------------
+! OSPF (underlay)
+! ----------------------------------------------------------------------------
+! Only job: make every loopback reachable from every router.
+! "network 0.0.0.0/0 area 0" enables OSPF on every interface that has an IP,
+! all in a single area (backbone).
+router ospf
+ network 0.0.0.0/0 area 0
+exit
+!
+! ----------------------------------------------------------------------------
+! BGP EVPN (overlay control plane)
+! ----------------------------------------------------------------------------
+! iBGP, everyone in AS 1. All leaves share the peer-group LEAFS.
+! "bgp listen range" accepts dynamic sessions from any loopback in
+! 1.1.1.0/24, so leaves do not need to be declared one by one.
+! "route-reflector-client" reflects routes learned from one leaf to the
+! others, avoiding an iBGP full mesh between leaves.
+router bgp 1
+ bgp router-id 1.1.1.1
+ neighbor LEAFS peer-group
+ neighbor LEAFS remote-as 1
+ neighbor LEAFS update-source lo
+ bgp listen range 1.1.1.0/24 peer-group LEAFS
+ !
+ ! Exchange EVPN routes (type 2 / type 3) with the leaves.
+ address-family l2vpn evpn
+  neighbor LEAFS activate
+  neighbor LEAFS route-reflector-client
+ exit-address-family
+!
+exit

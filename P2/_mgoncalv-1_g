@@ -1,0 +1,10 @@
+auto eth0
+iface eth0 inet static
+    address 10.1.1.1
+    netmask 255.255.255.0
+    up /sbin/ip link add br0 type bridge
+    up /sbin/ip link set dev br0 up
+    up /sbin/ip link add name vxlan10 type vxlan id 10 dev eth0 group 239.1.1.1 dstport 4789
+    up /sbin/ip link set dev vxlan10 up
+    up /sbin/ip link set vxlan10 master br0
+    up /sbin/ip link set eth1 master br0
