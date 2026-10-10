@@ -1,3 +1,10 @@
+# ============================================================================
+# Device : host_mgoncalv-2
+# File   : /etc/network/interfaces (applied by GNS3 at boot)
+# ============================================================================
+# 30.1.1.0/24 is the overlay LAN shared by the 2 hosts. For the host it is
+# just a flat L2 network: it does not know the VXLAN tunnel exists.
+# Its ARP/ICMP frames are carried inside VXLAN (VNI 10) by router_mgoncalv-2.
 auto eth0
 iface eth0 inet static
     address 30.1.1.2

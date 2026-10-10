@@ -1,10 +1,31 @@
+# ============================================================================
+# Device : router_mgoncalv-1
+# Role   : VTEP for VNI 10 - DYNAMIC MULTICAST mode
+# File   : /etc/network/interfaces (applied by GNS3 at boot)
+#   eth0 -> Switch_mgoncalv (underlay, 10.1.1.0/24)
+#   eth1 -> host_mgoncalv-1 (overlay, L2 only)
+# ============================================================================
+# Underlay: plain IP network between the two routers. It only has to carry
+# the encapsulated VXLAN packets (UDP) from one VTEP to the other.
 auto eth0
 iface eth0 inet static
     address 10.1.1.1
     netmask 255.255.255.0
+    # br0 = virtual switch inside the router. It joins the host port (eth1)
+    # and the VXLAN tunnel, so the host's frames enter the tunnel. Its MAC
+    # table can be shown with: /usr/sbin/brctl showmacs br0
     up /sbin/ip link add br0 type bridge
     up /sbin/ip link set dev br0 up
+    # vxlan10 = VNI 10 over UDP 4789, sent out of eth0.
+    #   group 239.1.1.1 : instead of naming the peer, every VTEP of VNI 10 joins
+    #   this multicast group. BUM traffic (Broadcast, Unknown unicast, Multicast,
+    #   e.g. ARP) is sent to the group, so all VTEPs receive it without being
+    #   listed. Once a MAC is learned, traffic goes unicast to the right VTEP.
+    #   Adding a VTEP needs no change on the others.
+    # /sbin/ip is called explicitly: the busybox "ip" of the GNS3 console
+    # cannot create vxlan interfaces.
     up /sbin/ip link add name vxlan10 type vxlan id 10 dev eth0 group 239.1.1.1 dstport 4789
     up /sbin/ip link set dev vxlan10 up
+    # Plug the tunnel and the host port into the bridge.
     up /sbin/ip link set vxlan10 master br0
     up /sbin/ip link set eth1 master br0
